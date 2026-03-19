@@ -61,12 +61,22 @@ final class TranscriptionEngine {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        let options = DecodingOptions(
-            language: language,
-            temperature: 0.0,
-            detectLanguage: language == "auto",
-            promptTokens: buildPromptTokens(promptText: promptText)
-        )
+        let promptTokens = buildPromptTokens(promptText: promptText)
+        let options: DecodingOptions
+        if !promptTokens.isEmpty {
+            options = DecodingOptions(
+                language: language,
+                temperature: 0.0,
+                detectLanguage: language == "auto",
+                promptTokens: promptTokens
+            )
+        } else {
+            options = DecodingOptions(
+                language: language,
+                temperature: 0.0,
+                detectLanguage: language == "auto"
+            )
+        }
 
         let start = Date()
         let results = try await whisperKit.transcribe(audioArray: audioSamples, decodeOptions: options)

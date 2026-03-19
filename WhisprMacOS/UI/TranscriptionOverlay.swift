@@ -38,6 +38,7 @@ final class TranscriptionOverlay {
 
         contentModel.confirmedText = ""
         contentModel.unconfirmedText = ""
+        contentModel.audioLevel = 0.0
         contentModel.isVisible = true
 
         panel.alphaValue = 0
@@ -112,33 +113,40 @@ struct WaveformView: View {
     let audioLevel: Float
     let barCount = 5
 
+    /// Normalize raw RMS (typically 0.001–0.15 for speech) to 0–1 visual range
+    private var normalizedLevel: CGFloat {
+        // Apply log scaling: map ~0.005–0.15 RMS to 0–1
+        let clamped = max(Float(0.001), min(audioLevel, 0.3))
+        let logVal = (log10(clamped) + 3) / 2.5 // maps log10(0.001)=-3 → 0, log10(0.3)≈-0.5 → 1
+        return CGFloat(max(0, min(logVal, 1.0)))
+    }
+
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             ForEach(0..<barCount, id: \.self) { index in
-                WaveformBar(audioLevel: audioLevel, index: index)
+                WaveformBar(level: normalizedLevel, index: index)
             }
         }
-        .frame(height: 16)
+        .frame(height: 18)
     }
 }
 
 struct WaveformBar: View {
-    let audioLevel: Float
+    let level: CGFloat
     let index: Int
 
     // Each bar gets a slightly different response curve for organic feel
     private var barHeight: CGFloat {
-        let base = CGFloat(min(max(audioLevel, 0), 1))
-        let offset = sin(Double(index) * 1.3) * 0.15
-        let height = base + CGFloat(offset) * base
-        return max(0.15, min(height, 1.0))
+        let offset = sin(Double(index) * 1.3 + 0.5) * 0.2
+        let height = level + offset * level
+        return max(0.1, min(height, 1.0))
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 1.5)
-            .fill(.white.opacity(0.8))
-            .frame(width: 3, height: 4 + barHeight * 12)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: barHeight)
+        RoundedRectangle(cornerRadius: 2)
+            .fill(.white.opacity(0.85))
+            .frame(width: 3, height: 4 + barHeight * 14)
+            .animation(.interpolatingSpring(stiffness: 300, damping: 12), value: barHeight)
     }
 }
 
@@ -146,14 +154,15 @@ struct OverlayContentView: View {
     let model: OverlayContentModel
 
     var body: some View {
+        let level = model.audioLevel
         HStack(spacing: 8) {
             if model.confirmedText.isEmpty && model.unconfirmedText.isEmpty {
-                WaveformView(audioLevel: model.audioLevel)
+                WaveformView(audioLevel: level)
                 Text("Listening...")
                     .foregroundStyle(.secondary)
             } else {
                 // Show small waveform indicator while recording with text
-                WaveformView(audioLevel: model.audioLevel)
+                WaveformView(audioLevel: level)
                     .scaleEffect(0.7)
                     .opacity(0.6)
                 Text("\(Text(model.confirmedText).foregroundStyle(.white))\(Text(model.unconfirmedText).foregroundStyle(.white.opacity(0.5)))")

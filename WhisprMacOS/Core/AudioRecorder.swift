@@ -101,16 +101,14 @@ final class AudioRecorder {
             }
         }
 
-        // Engine is already prepared — just start it (near-instant)
-        if !engine.isRunning {
-            try engine.start()
-        }
+        // Re-prepare and start (fast since engine already exists from warmUp)
+        engine.prepare()
+        try engine.start()
     }
 
     func stopRecording() -> [Float] {
         audioEngine?.inputNode.removeTap(onBus: 0)
-        // Don't stop the engine — keep it warm for next recording
-        // Engine will be stopped only on shutdown
+        audioEngine?.stop()
         levelCallback = nil
 
         return bufferQueue.sync { audioBuffer }

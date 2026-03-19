@@ -67,10 +67,9 @@ struct SettingsView: View {
             Section("Model") {
                 Picker("Model", selection: $config.modelName) {
                     Text("tiny.en (75 MB, fastest)").tag("tiny.en")
-                    Text("base.en (142 MB, balanced)").tag("base.en")
+                    Text("base.en (142 MB, recommended)").tag("base.en")
                     Text("small.en (466 MB, accurate)").tag("small.en")
                     Text("medium.en (1.5 GB, very accurate)").tag("medium.en")
-                    Text("large-v3 (3 GB, best quality)").tag("large-v3")
                 }
                 .onChange(of: config.modelName) { _, _ in config.save() }
 
@@ -79,6 +78,10 @@ struct SettingsView: View {
                     Text("Auto-detect").tag("auto")
                 }
                 .onChange(of: config.language) { _, _ in config.save() }
+
+                Text("Use .en models for English. base.en is recommended for real-time use.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Permissions") {
