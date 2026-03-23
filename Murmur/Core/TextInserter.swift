@@ -35,6 +35,11 @@ final class TextInserter {
         let pasteboard = NSPasteboard.general
         let savedItems = savePasteboard(pasteboard)
 
+        // Guarantee clipboard restore on all exit paths (crash-safety)
+        defer {
+            restorePasteboard(pasteboard, items: savedItems)
+        }
+
         // Set our text
         pasteboard.clearContents()
         let success = pasteboard.setString(text, forType: .string)
@@ -46,9 +51,8 @@ final class TextInserter {
         // Simulate Cmd+V
         simulatePaste()
 
-        // Restore clipboard after delay
+        // Wait for paste to complete before defer restores clipboard
         try? await Task.sleep(for: .milliseconds(Int(restoreDelay * 1000)))
-        restorePasteboard(pasteboard, items: savedItems)
     }
 
     // MARK: - Accessibility API Insertion
