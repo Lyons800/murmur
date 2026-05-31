@@ -108,6 +108,22 @@ final class TextInserter {
         return true
     }
 
+    /// Reads the selected text in the frontmost app's focused element, or nil if there
+    /// is no selection. Used by voice-edit to capture what to rewrite.
+    func readSelectedText() -> String? {
+        let systemElement = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemElement, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef,
+              CFGetTypeID(focused as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
+        let axElement = focused as! AXUIElement
+
+        var selectedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axElement, kAXSelectedTextAttribute as CFString, &selectedRef) == .success,
+              let selected = selectedRef as? String, !selected.isEmpty else { return nil }
+        return selected
+    }
+
     // MARK: - Keyboard Simulation
 
     private func simulatePaste() {

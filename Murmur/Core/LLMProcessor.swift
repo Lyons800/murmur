@@ -98,6 +98,39 @@ final class LLMProcessor {
         return await process(text: selectedText, context: .other, command: command)
     }
 
+    /// Voice-edit: apply a free-form spoken instruction to a passage of text. Unlike
+    /// `process` (cleanup), this honors arbitrary edits and may change length. Returns
+    /// the original text on failure.
+    func rewrite(_ text: String, instruction: String) async -> String {
+        #if canImport(MLXLLM)
+        guard isLoaded, let modelContainer else { return text }
+
+        let system = """
+        You are a precise in-place text editor. Apply this instruction to the user's text:
+        "\(instruction)"
+        Output ONLY the edited text — no preamble, no quotation marks, no explanation. \
+        Preserve meaning unless the instruction says otherwise.
+        """
+
+        do {
+            let session = ChatSession(
+                modelContainer,
+                instructions: system,
+                generateParameters: GenerateParameters(temperature: 0.2)
+            )
+            let result = try await session.respond(to: text + " /no_think")
+            let edited = stripLLMArtefacts(result)
+            NSLog("[Murmur] Voice-edit: '\(instruction)' → '\(edited.prefix(60))'")
+            return edited.isEmpty ? text : edited
+        } catch {
+            NSLog("[Murmur] Voice-edit rewrite failed: \(error.localizedDescription)")
+            return text
+        }
+        #else
+        return text
+        #endif
+    }
+
     // MARK: - Few-Shot Prompting
 
     private func buildFewShotSystemPrompt(for context: AppContext) -> String {
