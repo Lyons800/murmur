@@ -152,14 +152,15 @@ final class TranscriptionEngine {
     }
 }
 
-enum TranscriptionEngineError: LocalizedError {
-    case modelNotLoaded
-    case transcriptionFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .modelNotLoaded: return "Whisper model not loaded"
-        case .transcriptionFailed: return "Transcription produced no results"
-        }
-    }
-}
+// MOVED TO TranscriptionEngineProtocol.swift (Task 2 deletes this file)
+// enum TranscriptionEngineError: LocalizedError {
+//     case modelNotLoaded
+//     case transcriptionFailed
+//
+//     var errorDescription: String? {
+//         switch self {
+//         case .modelNotLoaded: return "Whisper model not loaded"
+//         case .transcriptionFailed: return "Transcription produced no results"
+//         }
+//     }
+// }
