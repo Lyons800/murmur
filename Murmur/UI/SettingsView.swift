@@ -31,6 +31,10 @@ struct SettingsView: View {
         .onChange(of: config.llmEnabled) { _, _ in config.save() }
         .onChange(of: config.historyEnabled) { _, _ in config.save() }
         .onChange(of: config.muteMediaDuringRecording) { _, _ in config.save() }
+        .onChange(of: config.enginePreference) { _, _ in
+            config.save()
+            NotificationCenter.default.post(name: .murmurEngineConfigChanged, object: nil)
+        }
         .onChange(of: config.launchAtLogin) { _, newValue in
             config.save()
             setLaunchAtLogin(newValue)
@@ -67,6 +71,17 @@ struct SettingsView: View {
             }
 
             Section("Model") {
+                let engineAvail = ModelManager.availability(osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+
+                Picker("Engine", selection: $config.enginePreference) {
+                    Text("Recommended (Automatic)").tag(EnginePreference.automatic)
+                    Text(ModelManager.displayName(.parakeet)).tag(EnginePreference.parakeet)
+                    Text(ModelManager.displayName(.whisperKit)).tag(EnginePreference.whisperKit)
+                    if engineAvail[.appleSpeech] == true {
+                        Text(ModelManager.displayName(.appleSpeech)).tag(EnginePreference.appleSpeech)
+                    }
+                }
+
                 Picker("Language", selection: $config.language) {
                     Text("English").tag("en")
                     Divider()
@@ -94,6 +109,7 @@ struct SettingsView: View {
                         config.modelName = String(config.modelName.dropLast(3)) // base.en → base
                     }
                     config.save()
+                    NotificationCenter.default.post(name: .murmurEngineConfigChanged, object: nil)
                 }
 
                 Picker("Model", selection: $config.modelName) {
@@ -110,7 +126,10 @@ struct SettingsView: View {
                         Text("large-v3 (3 GB, best multilingual)").tag("large-v3")
                     }
                 }
-                .onChange(of: config.modelName) { _, _ in config.save() }
+                .onChange(of: config.modelName) { _, _ in
+                    config.save()
+                    NotificationCenter.default.post(name: .murmurEngineConfigChanged, object: nil)
+                }
 
                 if config.language == "en" {
                     Text("Use .en models for English. base.en is recommended for real-time use.")
