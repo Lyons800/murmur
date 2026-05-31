@@ -56,12 +56,26 @@ final class FileTranscriber {
                 promptText: nil
             )
 
-            for segment in result.segments {
-                allSegments.append(FileTranscriptionSegment(
-                    text: segment.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    startTime: chunkStartTime + segment.start,
-                    endTime: chunkStartTime + segment.end
-                ))
+            if result.segments.isEmpty {
+                // Engines like Parakeet / AppleSpeech return only `.text` with no
+                // segments. Synthesize a single segment spanning this chunk so the
+                // file transcript isn't empty.
+                let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    allSegments.append(FileTranscriptionSegment(
+                        text: trimmed,
+                        startTime: chunkStartTime,
+                        endTime: chunkStartTime + Double(chunk.count) / sampleRate
+                    ))
+                }
+            } else {
+                for segment in result.segments {
+                    allSegments.append(FileTranscriptionSegment(
+                        text: segment.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                        startTime: chunkStartTime + segment.start,
+                        endTime: chunkStartTime + segment.end
+                    ))
+                }
             }
 
             // Advance past the chunk, minus overlap for context continuity

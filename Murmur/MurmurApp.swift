@@ -29,7 +29,7 @@ struct MurmurApp: App {
         .defaultPosition(.center)
 
         Window("Transcribe File", id: "file-transcription") {
-            FileTranscriptionView(transcriptionEngine: appDelegate.transcriptionEngine)
+            FileTranscriptionView(appDelegate: appDelegate)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -113,6 +113,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
     private var streamingTask: Task<Void, Error>?
     private var onboardingWindow: NSWindow?
 
+    /// Tracks the in-flight model load triggered by a reload, so a rapid second
+    /// reload can cancel the previous load before starting a new one.
+    private var engineLoadTask: Task<Void, Never>?
+    /// Set when a reload is requested while a dictation is active. Applied once
+    /// the app returns to idle (`.ready`).
+    private var pendingEngineReload = false
+
     override init() {
         let config = MurmurConfig.load()
         self.transcriptionEngine = Self.buildEngine(for: config)
@@ -156,13 +163,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
     /// Rebuild the engine from the current persisted config and reload its model.
     /// Called when Settings posts `.murmurEngineConfigChanged`.
     func reloadEngineFromConfig() {
+        // Never swap the engine out from under an active dictation — the
+        // streaming/final transcription paths read `transcriptionEngine` per
+        // call, so unloading it mid-flight breaks an in-progress transcription.
+        // Defer the reload until the app returns to idle.
+        switch appState.state {
+        case .recording, .transcribing, .inserting:
+            pendingEngineReload = true
+            NSLog("[Murmur] Engine reload deferred (state: \(appState.state.statusText))")
+            return
+        default:
+            break
+        }
+
+        pendingEngineReload = false
         let config = MurmurConfig.load()
         let newEngine = Self.buildEngine(for: config)
         let old = transcriptionEngine
+
+        // Cancel any previous in-flight load before swapping.
+        engineLoadTask?.cancel()
         old.unload()
         transcriptionEngine = newEngine
         NSLog("[Murmur] Engine reloaded: \(newEngine.identifier.rawValue)")
-        Task { try? await newEngine.loadModel(progress: nil) }
+        engineLoadTask = Task { try? await newEngine.loadModel(progress: nil) }
+    }
+
+    /// Set the app back to `.ready` and, if a reload was deferred while a
+    /// dictation was active, apply it now.
+    private func setReadyAndApplyPendingReload() {
+        appState.state = .ready
+        if pendingEngineReload {
+            NSLog("[Murmur] Applying deferred engine reload")
+            reloadEngineFromConfig()
+        }
     }
 
     private static let onboardingCompleteKey = "murmur_onboarding_complete"
@@ -461,7 +495,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
         guard allSamples.count > 8000 else {
             NSLog("[Murmur] Streaming: too short (\(allSamples.count) samples)")
             if config.playSounds { SoundEffects.playError() }
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
             return
         }
 
@@ -494,7 +528,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             }
 
             NSLog("[Murmur] Filtered hallucination or empty: '\(rawText)'")
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
         } catch {
             // On error, try streaming fallback
             if !lastStreamingText.isEmpty, !isHallucination(lastStreamingText) {
@@ -504,7 +538,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             }
             NSLog("[Murmur] Final transcription error: \(error)")
             if config.playSounds { SoundEffects.playError() }
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
         }
     }
 
@@ -517,7 +551,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
         guard samples.count > 8000 else {
             NSLog("[Murmur] Too short (\(samples.count) samples), ignoring")
             if config.playSounds { SoundEffects.playError() }
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
             return
         }
 
@@ -528,7 +562,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
 
         if rmsDb < -50 {
             NSLog("[Murmur] Audio too quiet (silence), ignoring")
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
             return
         }
 
@@ -546,7 +580,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             let trimmed = Self.stripSpecialTokens(result.text)
             guard !trimmed.isEmpty, !isHallucination(trimmed) else {
                 NSLog("[Murmur] Filtered hallucination or empty: '\(trimmed)'")
-                appState.state = .ready
+                setReadyAndApplyPendingReload()
                 return
             }
 
@@ -557,7 +591,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             NSLog("[Murmur] Transcription error: \(error)")
             if config.playSounds { SoundEffects.playError() }
             // Error recovery: return to .ready immediately instead of hanging
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
         }
     }
 
@@ -636,7 +670,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             pasteboard.setString(processed, forType: .string)
             appState.lastTranscription = processed
             if config.playSounds { SoundEffects.playStop() }
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
 
             // Prompt for accessibility once (not every time)
             if !UserDefaults.standard.bool(forKey: "murmur_accessibility_prompted") {
@@ -654,7 +688,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
 
         appState.lastTranscription = processed
         if config.playSounds { SoundEffects.playStop() }
-        appState.state = .ready
+        setReadyAndApplyPendingReload()
     }
 
     // MARK: - Voice Commands
@@ -666,7 +700,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
         guard let selectedText = await VoiceCommandParser.captureSelectedText(), !selectedText.isEmpty else {
             NSLog("[Murmur] No text selected for voice command")
             if config.playSounds { SoundEffects.playError() }
-            appState.state = .ready
+            setReadyAndApplyPendingReload()
             return
         }
 
@@ -679,7 +713,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
 
         appState.lastTranscription = result
         if config.playSounds { SoundEffects.playStop() }
-        appState.state = .ready
+        setReadyAndApplyPendingReload()
     }
 
     // MARK: - Hallucination Filter

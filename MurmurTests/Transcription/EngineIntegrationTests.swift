@@ -11,7 +11,7 @@ final class EngineIntegrationTests: XCTestCase {
     }
 
     func test_parakeet_transcribesKnownPhrase() async throws {
-        try XCTSkipUnless(shouldRun, "Set MURMUR_RUN_ENGINE_INTEGRATION=1 to run engine integration tests")
+        try XCTSkipUnless(shouldRun, "Set TEST_RUNNER_MURMUR_RUN_ENGINE_INTEGRATION=1 when invoking xcodebuild (the test runner exposes it as MURMUR_RUN_ENGINE_INTEGRATION) to run engine integration tests")
         let engine = ParakeetEngine(version: .v2)
         try await engine.loadModel(progress: nil)
         let result = try await engine.transcribe(audioSamples: try loadSamples(), language: "en", promptText: nil)
@@ -19,7 +19,7 @@ final class EngineIntegrationTests: XCTestCase {
     }
 
     func test_appleSpeech_transcribesKnownPhrase() async throws {
-        try XCTSkipUnless(shouldRun, "Set TEST_RUNNER_MURMUR_RUN_ENGINE_INTEGRATION=1")
+        try XCTSkipUnless(shouldRun, "Set TEST_RUNNER_MURMUR_RUN_ENGINE_INTEGRATION=1 when invoking xcodebuild (the test runner exposes it as MURMUR_RUN_ENGINE_INTEGRATION) to run engine integration tests")
         guard #available(macOS 26.0, *) else { throw XCTSkip("Requires macOS 26+") }
         let engine = AppleSpeechEngine(localeID: "en-US")
         try await engine.loadModel(progress: nil)
