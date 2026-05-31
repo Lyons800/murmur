@@ -33,4 +33,23 @@ final class EngineSelectorTests: XCTestCase {
         let id = EngineSelector.resolve(preference: .appleSpeech, osMajor: 15, language: "en", appleSupported: appleLocales)
         XCTAssertEqual(id, .parakeet)
     }
+
+    func test_factory_buildsWhisperKitEngine() {
+        let e = EngineSelector.makeEngine(id: .whisperKit, modelName: "base.en", localeID: "en-US")
+        XCTAssertEqual(e.identifier, .whisperKit)
+    }
+
+    func test_factory_buildsParakeetEngine() {
+        let e = EngineSelector.makeEngine(id: .parakeet, modelName: "base.en", localeID: "en-US")
+        XCTAssertEqual(e.identifier, .parakeet)
+    }
+
+    func test_factory_appleSpeech_matchesHostOSAvailability() {
+        let e = EngineSelector.makeEngine(id: .appleSpeech, modelName: "base.en", localeID: "en-US")
+        if #available(macOS 26.0, *) {
+            XCTAssertEqual(e.identifier, .appleSpeech)
+        } else {
+            XCTAssertNotEqual(e.identifier, .appleSpeech) // falls back below macOS 26
+        }
+    }
 }
