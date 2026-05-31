@@ -6,9 +6,13 @@ final class HotkeyManager {
     private var localMonitor: Any?
     private var flagsMonitor: Any?
     private var isModifierKeyDown = false
+    private var activeHoldIsCommand = false
 
     var onRecordingStart: (() -> Void)?
     var onRecordingStop: (() -> Void)?
+    /// Fired when the dictation key is held together with ⇧ — Command Mode (Murmur Pro).
+    var onCommandStart: (() -> Void)?
+    var onCommandStop: (() -> Void)?
 
     private var targetKeyCode: UInt16
     private var targetModifiers: UInt
@@ -65,6 +69,7 @@ final class HotkeyManager {
         localMonitor = nil
         flagsMonitor = nil
         isModifierKeyDown = false
+        activeHoldIsCommand = false
         isToggled = false
     }
 
@@ -110,10 +115,13 @@ final class HotkeyManager {
         case .hold:
             if isPressed && !isModifierKeyDown {
                 isModifierKeyDown = true
-                onRecordingStart?()
+                // ⇧ held together with the dictation key = Command Mode (Murmur Pro).
+                activeHoldIsCommand = event.modifierFlags.contains(.shift)
+                if activeHoldIsCommand { onCommandStart?() } else { onRecordingStart?() }
             } else if !isPressed && isModifierKeyDown {
                 isModifierKeyDown = false
-                onRecordingStop?()
+                if activeHoldIsCommand { onCommandStop?() } else { onRecordingStop?() }
+                activeHoldIsCommand = false
             }
         case .toggle:
             if isPressed && !isModifierKeyDown {

@@ -109,6 +109,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
     let updateManager = UpdateManager()
     let mediaController = MediaController()
 
+    // Murmur Pro: voice-edit + the Dynamic Island surface.
+    let island = IslandController()
+    lazy var voiceEditService = VoiceEditService(selection: textInserter, rewriter: llmProcessor)
+    private var isCommandHold = false
+    private var lastEditBefore: String?
+
     var menuBarIcon: String = "waveform"
     private var streamingTask: Task<Void, Error>?
     private var onboardingWindow: NSWindow?
@@ -328,7 +334,102 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
             }
         }
 
+        // Command Mode (Murmur Pro): ⇧ + the dictation key.
+        hotkeyManager.onCommandStart = { [weak self] in
+            Task { @MainActor in self?.startCommand() }
+        }
+        hotkeyManager.onCommandStop = { [weak self] in
+            Task { @MainActor in await self?.stopCommandAndEdit() }
+        }
+        island.onUndo = { [weak self] in
+            Task { @MainActor in await self?.applyUndo() }
+        }
+
         hotkeyManager.start()
+    }
+
+    // MARK: - Command Mode (Murmur Pro)
+
+    private func startCommand() {
+        guard ProEntitlement.shared.isActive else {
+            island.message("Command Mode is a Murmur Pro feature.")
+            return
+        }
+        guard appState.state == .ready else { return }
+        guard Permissions.checkMicrophone() else {
+            island.message("Microphone access required.")
+            return
+        }
+        do {
+            try audioRecorder.startRecording { [weak self] level in
+                Task { @MainActor in self?.island.updateLevel(level) }
+            }
+            appState.state = .recording
+            isCommandHold = true
+            island.listening()
+        } catch {
+            NSLog("[Murmur] Command start failed: \(error.localizedDescription)")
+            appState.state = .ready
+        }
+    }
+
+    private func stopCommandAndEdit() async {
+        guard isCommandHold else { return }
+        isCommandHold = false
+
+        let samples = audioRecorder.stopRecording()
+        appState.state = .transcribing
+        island.thinking()
+
+        guard samples.count > 8000 else {
+            island.dismiss()
+            setReadyAndApplyPendingReload()
+            return
+        }
+
+        // Transcribe the spoken instruction (e.g. "make this more formal").
+        let config = MurmurConfig.load()
+        let trimmed = Self.trimTrailingSilence(samples, threshold: 0.005, minTrailingSamples: 8000)
+        let instruction: String
+        do {
+            let result = try await transcriptionEngine.transcribe(
+                audioSamples: trimmed, language: config.language, promptText: nil
+            )
+            instruction = Self.stripSpecialTokens(result.text).trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            island.message("Didn't catch that.")
+            setReadyAndApplyPendingReload()
+            return
+        }
+
+        guard !instruction.isEmpty, !isHallucination(instruction) else {
+            island.dismiss()
+            setReadyAndApplyPendingReload()
+            return
+        }
+
+        // Voice-edit needs the on-device LLM; load it on first use.
+        if !llmProcessor.isReady {
+            try? await llmProcessor.loadModel()
+        }
+
+        do {
+            let edit = try await voiceEditService.prepareEdit(instruction: instruction)
+            lastEditBefore = edit.before
+            await textInserter.insert(edit.after)
+            island.showResult(instruction: instruction, before: edit.before, after: edit.after)
+        } catch let e as VoiceEditError {
+            island.message(e.errorDescription ?? "Edit failed.")
+        } catch {
+            island.message("Edit failed.")
+        }
+        setReadyAndApplyPendingReload()
+    }
+
+    private func applyUndo() async {
+        guard let before = lastEditBefore else { return }
+        await textInserter.insert(before)
+        lastEditBefore = nil
     }
 
     // MARK: - Recording
