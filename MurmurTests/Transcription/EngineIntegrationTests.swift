@@ -17,4 +17,13 @@ final class EngineIntegrationTests: XCTestCase {
         let result = try await engine.transcribe(audioSamples: try loadSamples(), language: "en", promptText: nil)
         XCTAssertTrue(result.text.lowercased().contains("hello"), "got: \(result.text)")
     }
+
+    func test_appleSpeech_transcribesKnownPhrase() async throws {
+        try XCTSkipUnless(shouldRun, "Set TEST_RUNNER_MURMUR_RUN_ENGINE_INTEGRATION=1")
+        guard #available(macOS 26.0, *) else { throw XCTSkip("Requires macOS 26+") }
+        let engine = AppleSpeechEngine(localeID: "en-US")
+        try await engine.loadModel(progress: nil)
+        let result = try await engine.transcribe(audioSamples: try loadSamples(), language: "en", promptText: nil)
+        XCTAssertTrue(result.text.lowercased().contains("hello"), "got: \(result.text)")
+    }
 }
