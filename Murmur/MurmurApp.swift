@@ -1,4 +1,9 @@
 import SwiftUI
+import Speech
+
+extension Notification.Name {
+    static let murmurEngineConfigChanged = Notification.Name("murmurEngineConfigChanged")
+}
 
 @main
 struct MurmurApp: App {
@@ -24,7 +29,7 @@ struct MurmurApp: App {
         .defaultPosition(.center)
 
         Window("Transcribe File", id: "file-transcription") {
-            FileTranscriptionView(transcriptionEngine: appDelegate.transcriptionEngine)
+            FileTranscriptionView(transcriptionEngine: appDelegate.transcriptionEngine as? TranscriptionEngine)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -98,7 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
     let audioRecorder = AudioRecorder()
     let textInserter = TextInserter()
     let hotkeyManager: HotkeyManager
-    let transcriptionEngine: TranscriptionEngine
+    var transcriptionEngine: TranscriptionEngineProtocol
     let overlay = TranscriptionOverlay()
     let llmProcessor = LLMProcessor()
     let updateManager = UpdateManager()
@@ -110,13 +115,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
 
     override init() {
         let config = MurmurConfig.load()
-        self.transcriptionEngine = TranscriptionEngine(modelName: config.modelName)
+        self.transcriptionEngine = Self.buildEngine(for: config)
         self.hotkeyManager = HotkeyManager(
             keyCode: config.hotkeyKeyCode,
             modifiers: config.hotkeyModifiers,
             mode: config.recordingMode
         )
         super.init()
+
+        // Apply Settings engine/model changes live, without an app restart.
+        NotificationCenter.default.addObserver(forName: .murmurEngineConfigChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.reloadEngineFromConfig()
+            }
+        }
+    }
+
+    // MARK: - Engine Selection
+
+    /// Apple DictationTranscriber base languages (approximate; ~10 base langs).
+    /// Static to avoid async locale enumeration during init. AppleSpeechEngine
+    /// still guards unsupported locales at load time, and the factory falls back.
+    static let appleSupportedBaseLanguages: Set<String> = [
+        "en", "es", "fr", "de", "it", "pt", "zh", "ja", "ko", "yue"
+    ]
+
+    static func localeID(for language: String) -> String {
+        (language == "auto" || language == "en") ? "en-US" : language
+    }
+
+    static func buildEngine(for config: MurmurConfig) -> TranscriptionEngineProtocol {
+        let osMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let id = EngineSelector.resolve(preference: config.enginePreference,
+                                        osMajor: osMajor,
+                                        language: config.language,
+                                        appleSupported: appleSupportedBaseLanguages)
+        return EngineSelector.makeEngine(id: id, modelName: config.modelName, localeID: localeID(for: config.language))
+    }
+
+    /// Rebuild the engine from the current persisted config and reload its model.
+    /// Called when Settings posts `.murmurEngineConfigChanged`.
+    func reloadEngineFromConfig() {
+        let config = MurmurConfig.load()
+        let newEngine = Self.buildEngine(for: config)
+        let old = transcriptionEngine
+        old.unload()
+        transcriptionEngine = newEngine
+        NSLog("[Murmur] Engine reloaded: \(newEngine.identifier.rawValue)")
+        Task { try? await newEngine.loadModel(progress: nil) }
     }
 
     private static let onboardingCompleteKey = "murmur_onboarding_complete"
@@ -185,7 +231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, Observable {
         NSLog("[Murmur] Initializing...")
 
         // Load Whisper model (no permission prompts here)
-        NSLog("[Murmur] Loading model: \(transcriptionEngine.modelName)...")
+        NSLog("[Murmur] Loading model via engine: \(transcriptionEngine.identifier.rawValue)...")
         appState.state = .loading(progress: 0)
 
         do {
