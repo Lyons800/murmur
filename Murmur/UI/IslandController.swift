@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
+import DynamicNotchKit
 
-/// The Murmur Pro "Dynamic Island" — a top-center floating surface that hosts the AI
-/// moments (voice-edit before→after + Undo, and later Command Mode results). Dictation
-/// stays cursor-anchored (TranscriptionOverlay); this is the Pro layer's home.
+/// The Murmur Pro "Dynamic Island" — now backed by DynamicNotchKit, which provides the
+/// native notch-hugging chrome and expand/collapse animation. We supply the content,
+/// driven reactively by `IslandModel`. Dictation stays cursor-anchored
+/// (TranscriptionOverlay); this is the Pro/AI layer's home.
 
 @Observable
 final class IslandModel {
@@ -21,53 +23,52 @@ final class IslandModel {
     var level: Float = 0
 }
 
-/// Borderless panel that can still become key so the Undo button is clickable.
-private final class IslandPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-}
-
 @MainActor
 final class IslandController {
-    private var panel: NSPanel?
-    private var hostingView: NSHostingView<IslandView>?
     let model = IslandModel()
     var onUndo: (() -> Void)?
     var onRun: (() -> Void)?
     var onCancel: (() -> Void)?
+
     private var dismissTask: Task<Void, Never>?
 
-    func listening() { model.phase = .listening; present() }
-    func thinking() { model.phase = .thinking; present() }
-    func confirm(summary: String) { dismissTask?.cancel(); model.phase = .confirm(summary: summary); present() }
-    func answer(_ text: String) { model.phase = .answer(text); present(); scheduleDismiss(after: 8) }
-    func done(_ text: String) { model.phase = .done(text); present(); scheduleDismiss(after: 4) }
+    private lazy var notch: DynamicNotch<IslandView, EmptyView, EmptyView> = {
+        let model = self.model
+        return DynamicNotch(hoverBehavior: [.keepVisible], style: .auto) { [weak self] in
+            IslandView(
+                model: model,
+                onUndo: { self?.onUndo?(); self?.dismiss() },
+                onRun: { self?.onRun?() },
+                onCancel: { self?.onCancel?(); self?.dismiss() }
+            )
+        }
+    }()
 
+    func listening() { present(.listening) }
+    func thinking() { present(.thinking) }
+    func confirm(summary: String) { present(.confirm(summary: summary)) }              // no auto-dismiss
+    func answer(_ text: String) { present(.answer(text), autoDismiss: 9) }
+    func done(_ text: String) { present(.done(text), autoDismiss: 4) }
+    func message(_ text: String) { present(.message(text), autoDismiss: 4) }
     func showResult(instruction: String, before: String, after: String) {
-        model.phase = .result(instruction: instruction, before: before, after: after)
-        present()
-        scheduleDismiss(after: 7)
-    }
-
-    func message(_ text: String) {
-        model.phase = .message(text)
-        present()
-        scheduleDismiss(after: 3.5)
+        present(.result(instruction: instruction, before: before, after: after), autoDismiss: 7)
     }
 
     func updateLevel(_ level: Float) { model.level = level }
 
     func dismiss() {
         dismissTask?.cancel()
-        guard let panel else { return }
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.18
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                self?.panel?.orderOut(nil)
-                self?.model.phase = .hidden
-            }
-        })
+        Task { @MainActor in
+            await notch.hide()
+            model.phase = .hidden
+        }
+    }
+
+    private func present(_ phase: IslandModel.Phase, autoDismiss seconds: Double? = nil) {
+        dismissTask?.cancel()
+        model.phase = phase
+        Task { @MainActor in await notch.expand() }
+        if let seconds { scheduleDismiss(after: seconds) }
     }
 
     private func scheduleDismiss(after seconds: Double) {
@@ -76,59 +77,6 @@ final class IslandController {
             try? await Task.sleep(for: .seconds(seconds))
             if !Task.isCancelled { self?.dismiss() }
         }
-    }
-
-    private func present() {
-        dismissTask?.cancel()
-        if panel == nil { createPanel() }
-        guard let panel, let screen = NSScreen.main else { return }
-
-        let width: CGFloat = 520
-        hostingView?.layoutSubtreeIfNeeded()
-        let fitH = hostingView?.fittingSize.height ?? 96
-        let height = min(max(fitH, 56), 460)
-        let vf = screen.visibleFrame
-        // Anchor just below the menu bar, fully visible (not tucked under the notch).
-        let frame = NSRect(x: vf.midX - width / 2, y: vf.maxY - height - 8, width: width, height: height)
-        panel.setFrame(frame, display: true)
-
-        if panel.isVisible && panel.alphaValue > 0.9 {
-            panel.orderFrontRegardless()
-        } else {
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
-                panel.animator().alphaValue = 1
-            }
-        }
-    }
-
-    private func createPanel() {
-        let panel = IslandPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 150),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.level = .floating
-        panel.hasShadow = true
-        panel.isFloatingPanel = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.hidesOnDeactivate = false
-
-        let view = IslandView(
-            model: model,
-            onUndo: { [weak self] in self?.onUndo?(); self?.dismiss() },
-            onRun: { [weak self] in self?.onRun?() },
-            onCancel: { [weak self] in self?.onCancel?(); self?.dismiss() }
-        )
-        let hosting = NSHostingView(rootView: view)
-        panel.contentView = hosting
-        self.hostingView = hosting
-        self.panel = panel
     }
 }
 
@@ -144,19 +92,9 @@ struct IslandView: View {
 
     var body: some View {
         content
-            .padding(.horizontal, 20)
-            .padding(.vertical, 15)
-            .frame(maxWidth: 480, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.6)))
-                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
-            }
             .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 13)
+            .frame(maxWidth: 480, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -187,7 +125,7 @@ struct IslandView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 360)
+                .frame(maxHeight: 320)
             }
             .font(.system(size: 14, weight: .medium))
         case let .done(text):
@@ -199,11 +137,41 @@ struct IslandView: View {
         case let .result(instruction, before, after):
             resultView(instruction: instruction, before: before, after: after)
         case let .message(text):
-            HStack(spacing: 10) {
-                Circle().fill(signal).frame(width: 6, height: 6)
-                Text(text).foregroundStyle(.white.opacity(0.9))
+            HStack(alignment: .top, spacing: 10) {
+                Circle().fill(signal).frame(width: 6, height: 6).padding(.top, 6)
+                Text(text).foregroundStyle(.white.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
             }
             .font(.system(size: 14, weight: .medium))
+        }
+    }
+
+    private func confirmView(summary: String) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("ABOUT TO")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(signal.opacity(0.9))
+                Text(summary)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button(action: onCancel) {
+                Text("Cancel")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(.white.opacity(0.12)))
+            }.buttonStyle(.plain)
+            Button(action: onRun) {
+                Text("Run")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(red: 0.1, green: 0.06, blue: 0.02))
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+                    .background(Capsule().fill(signal))
+            }.buttonStyle(.plain)
         }
     }
 
@@ -222,47 +190,18 @@ struct IslandView: View {
                         .foregroundStyle(.white.opacity(0.9))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(.white.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
+                }.buttonStyle(.plain)
             }
             Text(before)
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.4))
                 .strikethrough(color: .white.opacity(0.25))
-                .lineLimit(2)
+                .lineLimit(3)
             Text(after)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
-                .lineLimit(3)
-        }
-    }
-
-    private func confirmView(summary: String) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("ABOUT TO")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(signal.opacity(0.9))
-                Text(summary)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 8)
-            Button(action: onCancel) {
-                Text("Cancel")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(.white.opacity(0.12)))
-            }.buttonStyle(.plain)
-            Button(action: onRun) {
-                Text("Run")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.1, green: 0.06, blue: 0.02))
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(Capsule().fill(signal))
-            }.buttonStyle(.plain)
+                .lineLimit(6)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
