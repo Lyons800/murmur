@@ -29,6 +29,7 @@ private final class IslandPanel: NSPanel {
 @MainActor
 final class IslandController {
     private var panel: NSPanel?
+    private var hostingView: NSHostingView<IslandView>?
     let model = IslandModel()
     var onUndo: (() -> Void)?
     var onRun: (() -> Void)?
@@ -82,10 +83,13 @@ final class IslandController {
         if panel == nil { createPanel() }
         guard let panel, let screen = NSScreen.main else { return }
 
-        let width: CGFloat = 480
-        let height: CGFloat = 150
+        let width: CGFloat = 520
+        hostingView?.layoutSubtreeIfNeeded()
+        let fitH = hostingView?.fittingSize.height ?? 96
+        let height = min(max(fitH, 56), 460)
         let vf = screen.visibleFrame
-        let frame = NSRect(x: vf.midX - width / 2, y: vf.maxY - height + 30, width: width, height: height)
+        // Anchor just below the menu bar, fully visible (not tucked under the notch).
+        let frame = NSRect(x: vf.midX - width / 2, y: vf.maxY - height - 8, width: width, height: height)
         panel.setFrame(frame, display: true)
 
         if panel.isVisible && panel.alphaValue > 0.9 {
@@ -121,7 +125,9 @@ final class IslandController {
             onRun: { [weak self] in self?.onRun?() },
             onCancel: { [weak self] in self?.onCancel?(); self?.dismiss() }
         )
-        panel.contentView = NSHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: view)
+        panel.contentView = hosting
+        self.hostingView = hosting
         self.panel = panel
     }
 }
@@ -137,20 +143,21 @@ struct IslandView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack {
-            content
-                .padding(.horizontal, 18)
-                .padding(.vertical, 14)
-                .frame(maxWidth: 460)
-                .background {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.black.opacity(0.55)))
-                        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(signal.opacity(0.22), lineWidth: 1))
-                }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
+        content
+            .padding(.horizontal, 20)
+            .padding(.vertical, 15)
+            .frame(maxWidth: 480, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.6)))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder private var content: some View {
@@ -173,14 +180,20 @@ struct IslandView: View {
             confirmView(summary: summary)
         case let .answer(text):
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "sparkles").foregroundStyle(signal).font(.system(size: 12))
-                Text(text).foregroundStyle(.white.opacity(0.95)).lineLimit(5)
+                Image(systemName: "sparkles").foregroundStyle(signal).font(.system(size: 12)).padding(.top, 2)
+                ScrollView {
+                    Text(text)
+                        .foregroundStyle(.white.opacity(0.95))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 360)
             }
             .font(.system(size: 14, weight: .medium))
         case let .done(text):
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(signal)
-                Text(text).foregroundStyle(.white.opacity(0.95)).lineLimit(2)
+                Text(text).foregroundStyle(.white.opacity(0.95)).lineLimit(4).fixedSize(horizontal: false, vertical: true)
             }
             .font(.system(size: 14, weight: .medium))
         case let .result(instruction, before, after):

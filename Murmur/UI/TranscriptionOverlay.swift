@@ -61,8 +61,8 @@ final class TranscriptionOverlay {
         // Auto-resize panel to fit content, anchoring at top-left
         if let panel, let hostingView {
             let fitting = hostingView.fittingSize
-            let width = min(max(fitting.width + 32, 200), 500)
-            let height = min(max(fitting.height + 16, 44), 200)
+            let width = min(max(fitting.width + 32, 200), 560)
+            let height = min(max(fitting.height + 16, 44), 380)
             var frame = panel.frame
             let topY = frame.maxY // anchor at top edge
             frame.size = NSSize(width: width, height: height)
@@ -169,7 +169,8 @@ struct OverlayContentView: View {
             }
         }
         .font(.system(size: 14, weight: .medium))
-        .lineLimit(6)
+        .lineLimit(16)
+        .fixedSize(horizontal: false, vertical: true)
         .multilineTextAlignment(.leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
