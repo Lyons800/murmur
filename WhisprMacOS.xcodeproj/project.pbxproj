@@ -11,6 +11,7 @@
 		BC91B4A32F6B00000024EFF8 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = BC91B4A12F6B00000024EFF8 /* MLXLLM */; };
 		BC91B4A42F6B00000024EFF8 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = BC91B4A22F6B00000024EFF8 /* MLXLMCommon */; };
 		BCMU000012F70000A0000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = BCMU000012F70000A0000002 /* Sparkle */; };
+		DEADBEEF000000000000DN03 /* DynamicNotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = DEADBEEF000000000000DN02 /* DynamicNotchKit */; };
 		FACADE000000000000000003 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = FACADE000000000000000002 /* FluidAudio */; };
 /* End PBXBuildFile section */
 
@@ -62,6 +63,7 @@
 			files = (
 				BC91B45F2F6ADE780024EFF8 /* WhisperKit in Frameworks */,
 				FACADE000000000000000003 /* FluidAudio in Frameworks */,
+				DEADBEEF000000000000DN03 /* DynamicNotchKit in Frameworks */,
 				BC91B4A32F6B00000024EFF8 /* MLXLLM in Frameworks */,
 				BC91B4A42F6B00000024EFF8 /* MLXLMCommon in Frameworks */,
 				BCMU000012F70000A0000001 /* Sparkle in Frameworks */,
@@ -127,6 +129,7 @@
 			packageProductDependencies = (
 				BC91B3912F6AE0000024EFF8 /* WhisperKit */,
 				FACADE000000000000000002 /* FluidAudio */,
+				DEADBEEF000000000000DN02 /* DynamicNotchKit */,
 				BC91B4A12F6B00000024EFF8 /* MLXLLM */,
 				BC91B4A22F6B00000024EFF8 /* MLXLMCommon */,
 				BCMU000012F70000A0000002 /* Sparkle */,
@@ -216,6 +219,7 @@
 			packageReferences = (
 				BC91B3902F6AE0000024EFF8 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				FACADE000000000000000001 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				DEADBEEF000000000000DN01 /* XCRemoteSwiftPackageReference "DynamicNotchKit" */,
 				BC91B4A02F6B00000024EFF8 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 				BCMU000012F70000A0000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
@@ -635,6 +639,14 @@
 				minimumVersion = 2.6.0;
 			};
 		};
+		DEADBEEF000000000000DN01 /* XCRemoteSwiftPackageReference "DynamicNotchKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/MrKai77/DynamicNotchKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 		FACADE000000000000000001 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -665,6 +677,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BCMU000012F70000A0000003 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		DEADBEEF000000000000DN02 /* DynamicNotchKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DEADBEEF000000000000DN01 /* XCRemoteSwiftPackageReference "DynamicNotchKit" */;
+			productName = DynamicNotchKit;
 		};
 		FACADE000000000000000002 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
