@@ -4,7 +4,7 @@ import Accelerate
 final class AudioRecorder {
     private var audioEngine: AVAudioEngine?
     private var audioBuffer: [Float] = []
-    private let bufferQueue = DispatchQueue(label: "app.sona.audiobuffer")
+    private let bufferQueue = DispatchQueue(label: "audio.sotto.audiobuffer")
     private var levelCallback: ((Float) -> Void)?
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
@@ -45,7 +45,7 @@ final class AudioRecorder {
         engine.prepare()
         isWarmed = true
 
-        NSLog("[Sona] AudioRecorder: warmed up, input format=\(inputFormat), sampleRate=\(inputFormat.sampleRate)")
+        NSLog("[Sotto] AudioRecorder: warmed up, input format=\(inputFormat), sampleRate=\(inputFormat.sampleRate)")
     }
 
     func startRecording(levelCallback: ((Float) -> Void)? = nil) throws {

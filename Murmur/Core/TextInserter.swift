@@ -14,22 +14,22 @@ final class TextInserter {
 
         // Check accessibility permission
         let hasAccess = AXIsProcessTrusted()
-        NSLog("[Sona] TextInserter: accessibility=\(hasAccess), inserting '\(text.prefix(50))...'")
+        NSLog("[Sotto] TextInserter: accessibility=\(hasAccess), inserting '\(text.prefix(50))...'")
 
         if !hasAccess {
-            NSLog("[Sona] WARNING: Accessibility not granted — cannot simulate paste. Opening System Settings...")
+            NSLog("[Sotto] WARNING: Accessibility not granted — cannot simulate paste. Opening System Settings...")
             Permissions.openAccessibilitySettings()
             return
         }
 
         // Try direct accessibility insertion first (avoids clipboard clobber)
         if insertViaAccessibility(text) {
-            NSLog("[Sona] TextInserter: inserted via accessibility API (clipboard preserved)")
+            NSLog("[Sotto] TextInserter: inserted via accessibility API (clipboard preserved)")
             return
         }
 
         // Fall back to clipboard + Cmd+V
-        NSLog("[Sona] TextInserter: accessibility insertion failed, falling back to clipboard paste")
+        NSLog("[Sotto] TextInserter: accessibility insertion failed, falling back to clipboard paste")
 
         // Save current clipboard
         let pasteboard = NSPasteboard.general
@@ -43,7 +43,7 @@ final class TextInserter {
         // Set our text
         pasteboard.clearContents()
         let success = pasteboard.setString(text, forType: .string)
-        NSLog("[Sona] TextInserter: clipboard set=\(success)")
+        NSLog("[Sotto] TextInserter: clipboard set=\(success)")
 
         // Small delay to ensure pasteboard is ready
         try? await Task.sleep(for: .milliseconds(50))
@@ -79,7 +79,7 @@ final class TextInserter {
         var writableRef: DarwinBoolean = false
         let isSettable = AXUIElementIsAttributeSettable(axElement, kAXSelectedTextAttribute as CFString, &writableRef)
         guard isSettable == .success, writableRef.boolValue else {
-            NSLog("[Sona] TextInserter: AX selected text not settable, skipping")
+            NSLog("[Sotto] TextInserter: AX selected text not settable, skipping")
             return false
         }
 
@@ -100,7 +100,7 @@ final class TextInserter {
             if readBack == text || readBack.isEmpty {
                 return true
             }
-            NSLog("[Sona] TextInserter: AX write reported success but verification failed (got '\(readBack.prefix(30))'), falling back")
+            NSLog("[Sotto] TextInserter: AX write reported success but verification failed (got '\(readBack.prefix(30))'), falling back")
             return false
         }
 

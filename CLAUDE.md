@@ -1,9 +1,9 @@
-# Sona — Project Conventions
+# Sotto — Project Conventions
 
 ## What is this?
-macOS menu bar dictation app (product name **Sona**, domain sona.app). Hold a hotkey, speak, release — text appears in any app. Powered by WhisperKit (on-device, CoreML + Neural Engine). Renamed Whispr → Murmur → **Sona** (the "Murmur" name collided with 7+ other Mac apps).
+macOS menu bar dictation app (product name **Sotto**, domain sotto.audio). Hold a hotkey, speak, release — text appears in any app. Powered by WhisperKit (on-device, CoreML + Neural Engine). Renamed Whispr → Murmur → Sona → **Sotto** (the "Murmur" name collided with 7+ other Mac apps).
 
-> **Naming note:** The product/app is **Sona** (`PRODUCT_NAME = Sona`, bundle id `app.sona`), but the Xcode **target, scheme, and Swift module remain "Murmur"** (`PRODUCT_MODULE_NAME = Murmur`). So `@testable import Murmur`, `MurmurApp`, `MurmurConfig`, the `Murmur/` source dir, and `MurmurTests` are all still correct — only the user-facing name/identity changed. The repo is `Lyons800/sona`; the local folder is still `WhisprMacOS`.
+> **Naming note:** The product/app is **Sotto** (`PRODUCT_NAME = Sotto`, bundle id `audio.sotto`), but the Xcode **target, scheme, and Swift module remain "Murmur"** (`PRODUCT_MODULE_NAME = Murmur`). So `@testable import Murmur`, `MurmurApp`, `MurmurConfig`, the `Murmur/` source dir, and `MurmurTests` are all still correct — only the user-facing name/identity changed. The repo is `Lyons800/sotto`; the local folder is still `WhisprMacOS`.
 
 ## Stack
 - Swift 5.10+, macOS 14.0+ (Sonoma)
@@ -17,7 +17,7 @@ macOS menu bar dictation app (product name **Sona**, domain sona.app). Hold a ho
 
 ## Architecture
 - Menu bar app (LSUIElement = true, no dock icon)
-- Bundle ID: `app.sona`
+- Bundle ID: `audio.sotto`
 - Observable AppState drives all UI updates
 - Core modules: AudioRecorder, TranscriptionEngine, HotkeyManager, TextInserter, TextPostProcessor, ContextDetector, LLMProcessor, VoiceCommandParser, CustomDictionary, FileTranscriber, MediaController, UpdateManager
 - UI: StatusBarController (menu bar), TranscriptionOverlay (floating preview), SettingsView (SwiftUI), FileTranscriptionView
@@ -33,9 +33,9 @@ macOS menu bar dictation app (product name **Sona**, domain sona.app). Hold a ho
 - Prefer value types (structs/enums) over classes except where reference semantics needed
 - All audio processing on background queues, UI updates on @MainActor
 - SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor — all types default to @MainActor unless explicitly opted out
-- Config struct: `MurmurConfig` (type name unchanged; stored as `sona_config` in UserDefaults, legacy fallback `murmur_config`)
-- NSLog prefix: `[Sona]`
-- App Support path: `~/Library/Application Support/Sona/`
+- Config struct: `MurmurConfig` (type name unchanged; stored as `sotto_config` in UserDefaults, legacy fallback `sona_config`)
+- NSLog prefix: `[Sotto]`
+- App Support path: `~/Library/Application Support/Sotto/`
 
 ## File Layout
 - `Murmur/Core/` — business logic (audio, transcription, hotkeys, text insertion)
@@ -62,6 +62,6 @@ macOS menu bar dictation app (product name **Sona**, domain sona.app). Hold a ho
 4. Enable in Settings → Features tab → toggle "Enable LLM cleanup"
 
 ## Migration
-- On first launch the whole data dir is renamed `{Murmur,Whispr}/` → `Sona/` (atomic move — preserves downloaded models, no re-download). See `TranscriptionHistory.migrateLegacyDataDirectory`.
-- UserDefaults flags migrated `murmur_*`/`whispr_*` → `sona_*` (no-op across a bundle-id change — user re-onboards once)
-- Config falls back `sona_config` → `murmur_config`
+- On first launch the whole data dir is renamed `{Sona,Murmur,Whispr}/` → `Sotto/` (atomic move — preserves downloaded models, no re-download). See `TranscriptionHistory.migrateLegacyDataDirectory`.
+- UserDefaults flags migrated `sona_*`/`murmur_*`/`whispr_*` → `sotto_*` (no-op across a bundle-id change — user re-onboards once)
+- Config falls back `sotto_config` → `sona_config`

@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  APP_NAME: Sona      # product/.app/.dmg name (PRODUCT_NAME override)
+  APP_NAME: Sotto      # product/.app/.dmg name (PRODUCT_NAME override)
   SCHEME: Murmur      # internal Xcode scheme/target name (unchanged)
 
 jobs:
